@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.tailwindcss.com"></script><link rel="stylesheet" href="style.css">
+<script src="config.js"></script><script src="common.js"></script><title>Create developer account</title></head>
+<body class="bg-slate-50 flex items-center justify-center min-h-screen p-4">
+<div class="bg-white shadow-xl rounded-2xl w-full max-w-xl p-8 my-6">
+  <div id="step1">
+    <h2 class="text-3xl font-extrabold text-slate-800 mb-2">Developer account</h2>
+    <p class="text-slate-500 mb-6">We ask who you are so users can see who is requesting their data.
+      Your contact details are never shown to users or shared.</p>
+    <form id="f" class="space-y-4">
+      <input class="inp" id="full_name" placeholder="Full legal name" maxlength="100" required>
+      <div class="grid grid-cols-2 gap-3">
+        <input class="inp" id="organization" placeholder="Organization (or your name)" maxlength="120" required>
+        <select class="inp" id="org_type" required>
+          <option value="">Organization type</option><option value="individual">Individual</option>
+          <option value="company">Company</option><option value="nonprofit">Non-profit</option>
+          <option value="education">Education</option><option value="government">Government</option></select>
+      </div>
+      <input class="inp" type="url" id="website" placeholder="Website (https://…)" required>
+      <div class="grid grid-cols-2 gap-3">
+        <input class="inp" id="country" placeholder="Country" maxlength="60" required>
+        <input class="inp" type="tel" id="phone" placeholder="Contact phone (+91…)" maxlength="16" required>
+      </div>
+      <input class="inp" type="email" id="support_email" placeholder="Support email shown to your users" required>
+      <textarea class="inp" id="intended_use" rows="3" maxlength="1000" required
+        placeholder="How will you use users' data? (30+ characters, be specific)"></textarea>
+      <hr class="my-2">
+      <input class="inp" type="email" id="email" placeholder="Login email" autocomplete="email" required>
+      <input class="inp" type="password" id="password" placeholder="Password (min 8 characters)" minlength="8" autocomplete="new-password" required>
+      <input class="inp" type="password" id="confirmPw" placeholder="Confirm password" minlength="8" autocomplete="new-password" required>
+      <label class="flex gap-2 text-sm text-slate-600"><input type="checkbox" id="terms" required class="mt-1">
+        <span>I confirm the information is accurate and I agree to use user data only for the purpose I described,
+        publish a privacy policy, and never sell or share it.</span></label>
+      <button class="btn" type="submit">Continue</button>
+    </form>
+    <p class="mt-4 text-center text-sm text-slate-600">Already registered? <a href="login.html" class="text-blue-600 font-semibold">Sign in</a></p>
+  </div>
+  <div id="step2" class="hidden">
+    <h2 class="text-3xl font-extrabold text-slate-800 mb-2 text-center">Verify email</h2>
+    <p class="text-slate-500 mb-6 text-center">Enter the 6-digit code sent to your login email.</p>
+    <form id="v" class="space-y-4">
+      <input class="inp text-center text-2xl font-bold" style="letter-spacing:.5em" id="otp" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="••••••" required>
+      <button class="btn" type="submit">Verify &amp; Register</button>
+      <button class="btn-alt" type="button" id="resend">Resend Code</button>
+    </form>
+  </div>
+  <p id="msg"></p>
+</div>
+<script>
+let mail = '';
+f.onsubmit = async e => {
+  e.preventDefault();
+  if (password.value !== confirmPw.value) return Auth.show('Passwords do not match');
+  const b = f.querySelector('button'); Auth.busy(b, true, 'Continue');
+  mail = email.value.trim().toLowerCase();
+  const r = await Auth.api('/api/dev/signup', { method: 'POST', auth: false, body: {
+    full_name: full_name.value, organization: organization.value, org_type: org_type.value, website: website.value,
+    country: country.value, phone: phone.value, support_email: support_email.value, intended_use: intended_use.value,
+    accept_terms: terms.checked, email: mail, password: password.value } });
+  Auth.busy(b, false, 'Continue');
+  if (!r.ok) return Auth.show(r.message || 'Signup failed');
+  step1.classList.add('hidden'); step2.classList.remove('hidden'); Auth.show('', true); otp.focus();
+};
+v.onsubmit = async e => {
+  e.preventDefault(); const b = v.querySelector('button[type=submit]'); Auth.busy(b, true, 'Verify & Register');
+  const r = await Auth.api('/api/dev/signup/verify', { method: 'POST', auth: false, body: { email: mail, otp: otp.value.trim() } });
+  Auth.busy(b, false, 'Verify & Register'); if (!r.ok) return Auth.show(r.message || 'Verification failed');
+  Auth.show('Developer account created! Redirecting…', true); setTimeout(() => location.href = 'login.html', 900);
+};
+resend.onclick = async () => { resend.disabled = true; setTimeout(() => resend.disabled = false, 60000);
+  const r = await Auth.api('/api/dev/signup/resend', { method: 'POST', auth: false, body: { email: mail } });
+  Auth.show(r.message || 'Request failed', r.ok); };
+</script></body></html>

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Developer dashboard | Secure Auth</title>
+<script src="https://cdn.tailwindcss.com"></script><link rel="stylesheet" href="style.css">
+<script src="config.js"></script><script src="common.js"></script>
+</head>
+<body class="bg-slate-50 min-h-screen p-4">
+<div class="max-w-3xl mx-auto py-6">
+  <div class="flex items-center justify-between mb-6">
+    <div><h1 class="text-2xl font-extrabold text-slate-800">Developer dashboard</h1>
+      <p id="who" class="text-sm text-slate-500"></p></div>
+    <button class="text-sm text-slate-600 hover:text-red-600 font-semibold" onclick="Auth.logout()">Log out</button>
+  </div>
+
+  <div class="bg-white rounded-2xl shadow p-5 mb-6 text-sm text-slate-600">
+    <p class="font-semibold text-slate-800 mb-1">Integrate with any OpenID Connect library</p>
+    <p>Discovery URL: <code id="disco" class="bg-slate-100 px-1 rounded break-all"></code></p>
+    <p class="mt-1">Use the Authorization Code flow with <b>PKCE (S256)</b>. Apps in <b>draft</b> work only for your test users.</p>
+  </div>
+
+  <div id="secretBox" class="hidden bg-green-50 border border-green-200 rounded-xl p-4 mb-6 text-sm"></div>
+
+  <div class="flex items-center justify-between mb-3">
+    <h2 class="font-bold text-slate-800">Your apps</h2>
+    <button id="newBtn" class="text-sm bg-blue-600 text-white font-semibold rounded-lg px-4 py-2">+ Register app</button>
+  </div>
+
+  <form id="form" class="hidden bg-white rounded-2xl shadow p-5 mb-6 space-y-3">
+    <h3 id="formTitle" class="font-bold text-slate-800">Register an app</h3>
+    <input class="inp" id="name" placeholder="App name" maxlength="80" required>
+    <textarea class="inp" id="description" rows="2" maxlength="500" placeholder="What does your app do? (shown to users)"></textarea>
+    <input class="inp" id="homepage_url" placeholder="Homepage (https://…)">
+    <input class="inp" id="privacy_policy_url" placeholder="Privacy policy URL (https://…) — required for review">
+    <input class="inp" id="terms_url" placeholder="Terms of service URL (optional)">
+    <textarea class="inp" id="data_use" rows="3" maxlength="1000" placeholder="Why does your app need each scope below? How is the data stored and protected? — required for review"></textarea>
+    <textarea class="inp" id="redirect_uris" rows="3" placeholder="Redirect URIs, one per line&#10;https://myapp.com/callback"></textarea>
+    <select class="inp" id="type">
+      <option value="confidential">Confidential — server-side app (gets a client secret)</option>
+      <option value="public">Public — single-page / mobile app (PKCE only)</option></select>
+    <div id="scopeBox" class="text-sm text-slate-700 space-y-1"></div>
+    <input class="inp" id="test_emails" placeholder="Test users' emails, comma separated (up to 10) — they can use the app before approval">
+    <div id="formErr" class="text-sm text-red-600"></div>
+    <div class="flex gap-3">
+      <button class="btn" type="submit" id="saveBtn">Save</button>
+      <button class="btn-alt" type="button" id="cancelBtn">Cancel</button></div>
+  </form>
+
+  <div id="list" class="space-y-3"></div>
+  <p id="empty" class="hidden text-sm text-slate-400">No apps registered yet.</p>
+  <p id="msg"></p>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const SCOPES = [['profile', 'Name, user ID, photo, gender'], ['email', 'Email address'],
+                ['phone', 'Phone number (sensitive)'], ['birthdate', 'Date of birth (sensitive)']];
+const STATUS = {
+  draft: ['Draft — testing only', 'bg-slate-100 text-slate-700'],
+  pending_review: ['In review', 'bg-amber-100 text-amber-700'],
+  approved: ['Approved — public', 'bg-green-100 text-green-700'],
+  rejected: ['Rejected', 'bg-red-100 text-red-700'],
+  suspended: ['Suspended', 'bg-red-100 text-red-700']
+};
+let editing = null, clients = [];
+
+// safe DOM builder (never uses innerHTML)
+function h(tag, props = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === 'class') e.className = v; else if (k === 'text') e.textContent = v;
+    else if (k.startsWith('on')) e[k] = v; else e.setAttribute(k, v);
+  }
+  kids.flat().forEach(c => e.append(c)); return e;
+}
+
+SCOPES.forEach(([s, label]) => $('scopeBox').append(h('label', { class: 'flex items-center gap-2' },
+  h('input', { type: 'checkbox', name: 'scope', value: s }), h('span', { text: s + ' — ' + label }))));
+
+function showSecret(client, secret) {
+  const box = $('secretBox'); box.replaceChildren(
+    h('p', { class: 'font-bold text-green-800', text: client.name }),
+    h('p', { text: 'Client ID: ' + client.id, class: 'break-all' }),
+    secret ? h('p', { class: 'break-all', text: 'Client secret: ' + secret }) : h('p', { text: 'Public app: no client secret.' }),
+    secret ? h('p', { class: 'text-green-700 mt-1', text: 'Copy the secret now — it is stored hashed and cannot be shown again.' }) : '');
+  box.classList.remove('hidden'); box.scrollIntoView({ behavior: 'smooth' });
+}
+
+function openForm(c) {
+  editing = c || null;
+  $('formTitle').textContent = c ? 'Edit ' + c.name : 'Register an app';
+  $('name').value = c ? c.name : ''; $('description').value = c ? c.description : '';
+  $('homepage_url').value = c ? c.homepage_url : ''; $('privacy_policy_url').value = c ? c.privacy_policy_url : '';
+  $('terms_url').value = c ? c.terms_url : ''; $('data_use').value = c ? c.data_use : '';
+  $('redirect_uris').value = c ? c.redirect_uris.join('\n') : '';
+  $('test_emails').value = c ? c.test_emails.join(', ') : '';
+  $('type').value = c ? c.type : 'confidential'; $('type').disabled = !!c;
+  document.querySelectorAll('input[name=scope]').forEach(i => i.checked = c ? c.scopes.includes(i.value) : ['profile', 'email'].includes(i.value));
+  $('formErr').textContent = ''; $('form').classList.remove('hidden'); $('name').focus();
+}
+$('newBtn').onclick = () => openForm(null);
+$('cancelBtn').onclick = () => $('form').classList.add('hidden');
+
+$('form').onsubmit = async e => {
+  e.preventDefault();
+  const body = {
+    name: $('name').value, description: $('description').value, homepage_url: $('homepage_url').value,
+    privacy_policy_url: $('privacy_policy_url').value, terms_url: $('terms_url').value, data_use: $('data_use').value,
+    redirect_uris: $('redirect_uris').value.split('\n').map(s => s.trim()).filter(Boolean),
+    scopes: [...document.querySelectorAll('input[name=scope]:checked')].map(i => i.value),
+    test_emails: $('test_emails').value.split(',').map(s => s.trim()).filter(Boolean)
+  };
+  const btn = $('saveBtn'); Auth.busy(btn, true, 'Save');
+  const r = editing
+    ? await Auth.api('/api/dev/clients/' + editing.id, { method: 'PATCH', body })
+    : await Auth.api('/api/dev/clients', { method: 'POST', body: { ...body, type: $('type').value } });
+  Auth.busy(btn, false, 'Save');
+  if (!r.ok) { $('formErr').textContent = (r.errors || [r.message]).join(' '); return; }
+  $('form').classList.add('hidden');
+  if (!editing) showSecret(r.client, r.client_secret);
+  load();
+};
+
+function card(c) {
+  const [label, cls] = STATUS[c.status] || [c.status, 'bg-slate-100'];
+  const actions = h('div', { class: 'flex flex-wrap gap-4 mt-3 text-sm' },
+    h('button', { class: 'text-blue-600 hover:underline', text: 'Edit', onclick: () => openForm(c) }),
+    (c.status === 'draft' || c.status === 'rejected') ? h('button', { class: 'text-green-700 hover:underline font-semibold', text: 'Submit for review',
+      onclick: async () => { const r = await Auth.api('/api/dev/clients/' + c.id + '/submit', { method: 'POST' });
+        Auth.show(r.ok ? 'Submitted for review.' : (r.errors || [r.message]).join(' '), r.ok); load(); } }) : '',
+    c.type === 'confidential' ? h('button', { class: 'text-blue-600 hover:underline', text: 'New secret',
+      onclick: async () => { if (!confirm('Generate a new secret? The old one stops working immediately.')) return;
+        const r = await Auth.api('/api/dev/clients/' + c.id + '/rotate-secret', { method: 'POST' });
+        if (r.ok) showSecret(c, r.client_secret); else Auth.show(r.message); } }) : '',
+    h('button', { class: 'text-red-600 hover:underline', text: 'Delete',
+      onclick: async () => { if (!confirm('Delete this app? All its users will be signed out.')) return;
+        await Auth.api('/api/dev/clients/' + c.id, { method: 'DELETE' }); load(); } }));
+  return h('div', { class: 'bg-white rounded-2xl shadow p-5 text-sm' },
+    h('div', { class: 'flex items-start justify-between gap-3' },
+      h('p', { class: 'font-bold text-slate-800 text-base', text: c.name }),
+      h('span', { class: 'text-xs font-semibold rounded-full px-2 py-1 whitespace-nowrap ' + cls, text: label })),
+    h('p', { class: 'text-slate-500 break-all mt-1', text: 'Client ID: ' + c.id }),
+    h('p', { class: 'text-slate-500', text: (c.type === 'public' ? 'Public' : 'Confidential') + ' · scopes: ' + c.scopes.join(' ') }),
+    ...c.redirect_uris.map(u => h('p', { class: 'text-slate-400 break-all', text: '↪ ' + u })),
+    c.test_emails.length ? h('p', { class: 'text-slate-400', text: 'Test users: ' + c.test_emails.join(', ') }) : '',
+    c.review_note ? h('p', { class: 'mt-2 bg-amber-50 text-amber-800 rounded-lg px-3 py-2', text: 'Reviewer note: ' + c.review_note }) : '',
+    actions);
+}
+
+async function load() {
+  const r = await Auth.api('/api/dev/clients');
+  if (r.status === 401) { Auth.Session.clear(); return Auth.goLogin(); }
+  clients = r.ok ? r.clients : [];
+  $('list').replaceChildren(...clients.map(card));
+  $('empty').classList.toggle('hidden', clients.length > 0);
+}
+
+(async () => {
+  if (!Auth.Session.get()) return Auth.goLogin();
+  $('disco').textContent = Auth.API + '/.well-known/openid-configuration';
+  const me = await Auth.api('/api/dev/me');
+  if (me.status === 401) { Auth.Session.clear(); return Auth.goLogin(); }
+  if (me.ok) $('who').textContent = me.developer.full_name + ' · ' + me.developer.organization + ' · ' + me.developer.email;
+  load();
+})();
+</script>
+</body></html>

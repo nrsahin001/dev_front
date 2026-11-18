@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.tailwindcss.com"></script><link rel="stylesheet" href="style.css">
+<script src="config.js"></script><script src="common.js"></script><title>Developer Portal | Secure Auth</title></head>
+<body class="bg-slate-50 min-h-screen flex items-center justify-center p-4">
+<div class="bg-white shadow-xl rounded-2xl w-full max-w-2xl p-8">
+  <h1 class="text-3xl font-extrabold text-slate-800">Developer Portal</h1>
+  <p class="text-slate-500 mt-2">Add “Sign in with Secure Auth” to your app. This portal is separate from user accounts:
+    developers must identify themselves so users know who is asking for their data.</p>
+  <h2 class="font-bold text-slate-800 mt-6 mb-2">How it works</h2>
+  <ol class="list-decimal pl-5 text-sm text-slate-600 space-y-1">
+    <li>Create a developer account (identity details + email verification).</li>
+    <li>Register your app. While in <b>draft</b> it works only for the test users you list.</li>
+    <li>Submit it for review with your privacy policy and a clear reason for every scope you request.</li>
+    <li>Once <b>approved</b>, any user can sign in to your app and sees who you are on the consent screen.</li>
+  </ol>
+  <h2 class="font-bold text-slate-800 mt-6 mb-2">What you commit to</h2>
+  <ul class="list-disc pl-5 text-sm text-slate-600 space-y-1">
+    <li>Use user data only for the purpose you described; never sell or share it.</li>
+    <li>Publish an accurate privacy policy and honor deletion requests.</li>
+    <li>Request only the scopes you need; keep secrets and tokens private.</li>
+    <li>Accept that apps that misuse data are suspended without notice.</li>
+  </ul>
+  <div class="grid grid-cols-2 gap-3 mt-8">
+    <a href="signup.html" class="btn">Create developer account</a>
+    <a href="login.html" class="btn-alt">Sign in</a>
+  </div>
+</div>
+<script>if (Auth.Session.get()) location.replace('dashboard.html');</script>
+</body></html>

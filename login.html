@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.tailwindcss.com"></script><link rel="stylesheet" href="style.css">
+<script src="config.js"></script><script src="common.js"></script><title>Developer sign in | Secure Auth</title></head>
+<body class="bg-slate-50 flex items-center justify-center min-h-screen p-4">
+<div class="bg-white shadow-xl rounded-2xl w-full max-w-md p-8">
+  <h2 class="text-3xl font-extrabold text-slate-800 mb-2 text-center">Developer sign in</h2>
+  <p class="text-slate-500 mb-8 text-center">Developer accounts are separate from user accounts.</p>
+  <form id="f" class="space-y-4">
+    <input class="inp" type="email" id="email" placeholder="Email Address" autocomplete="email" required>
+    <input class="inp" type="password" id="password" placeholder="Password" autocomplete="current-password" required>
+    <div class="text-right"><a href="forgot.html" class="text-sm text-blue-600 hover:underline">Forgot Password?</a></div>
+    <button class="btn" type="submit">Sign in</button>
+  </form>
+  <p id="msg"></p>
+  <p class="mt-6 text-center text-sm text-slate-600">New developer? <a href="signup.html" class="text-blue-600 font-semibold">Create an account</a></p>
+</div>
+<script>
+if (Auth.Session.get()) location.replace('dashboard.html');
+f.onsubmit = async e => {
+  e.preventDefault(); const b = f.querySelector('button'); Auth.busy(b, true, 'Sign in');
+  const r = await Auth.api('/api/dev/login', { method: 'POST', auth: false, body: { email: email.value, password: password.value } });
+  if (r.ok) { Auth.Session.set(r.token, r.expires_at); location.href = 'dashboard.html'; return; }
+  Auth.busy(b, false, 'Sign in'); Auth.show(r.message || 'Sign in failed');
+};
+</script></body></html>
